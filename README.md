@@ -114,8 +114,6 @@ python manage.py shell -c "from inventory.views import sync_daily_stock_date; sy
 
 Esta versión está destinada a demostraciones locales, no a entornos de producción.
 
-## Autor
-
 Alejandro Ku León — Estudiante de Ingeniería en Sistemas Computacionales en el Instituto Tecnológico de Mérida.
 
-[GitHub](https://github.com/Potato1Peeler) · [LinkedIn](https://www.linkedin.com/in/alejandro-ku-le%C3%B3n-955879407/)
+[LinkedIn](https://www.linkedin.com/in/alejandro-ku-le%C3%B3n-955879407/)
