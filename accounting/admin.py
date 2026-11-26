@@ -1,0 +1,27 @@
+from django.contrib import admin
+from . models import AccountNature, AccountGroup, AccountType, AccountAccount, Journal, CostCenter
+
+@admin.register(AccountNature)
+class AccountNatureAdmin(admin.ModelAdmin):
+    list_display = ('id_account_nature', 'name', 'symbol', 'effect_on_balance')
+
+@admin.register(AccountGroup)
+class AccountGroupAdmin(admin.ModelAdmin):
+    list_display = ('id_account_group', 'name', 'code_prefix', 'description')
+
+@admin.register(AccountType)
+class AccountTypeAdmin(admin.ModelAdmin):
+    list_display = ('id_account_type', 'name', 'description')
+
+@admin.register(AccountAccount)
+class AccountAccountAdmin(admin.ModelAdmin):
+    list_display = ('id_account', 'name', 'code', 'account_type', 'nature', 'is_control_account', 'status')
+
+@admin.register(Journal)
+class JournalAdmin(admin.ModelAdmin):
+    list_display = ('id_journal', 'group_journal', 'reference', 'id_account', 'credit', 'debit', 'currency', 'cost_center', 'description','status', 'created_at', 'updated_at', 'created_by')
+
+
+@admin.register(CostCenter)
+class ConstCenterAdmin(admin.ModelAdmin):
+    list_display = ('id_cost_center', 'name', 'description', 'status', 'created_at', 'updated_at', 'created_by')

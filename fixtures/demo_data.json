@@ -1,0 +1,88 @@
+[
+{
+  "model": "materials.material",
+  "pk": 1,
+  "fields": {
+    "id_material": "DEMO-MAT-001",
+    "name": "Packaging Box",
+    "description": "Small cardboard packaging box",
+    "unit": 1,
+    "material_type": 2,
+    "status": 1,
+    "created_at": "2026-11-26T03:30:04.158Z",
+    "updated_at": "2026-11-26T03:30:04.158Z",
+    "created_by": null
+  }
+},
+{
+  "model": "materials.material",
+  "pk": 2,
+  "fields": {
+    "id_material": "DEMO-MAT-002",
+    "name": "Shipping Label",
+    "description": "Standard shipping label",
+    "unit": 1,
+    "material_type": 2,
+    "status": 1,
+    "created_at": "2026-11-26T03:30:04.162Z",
+    "updated_at": "2026-11-26T03:30:04.162Z",
+    "created_by": null
+  }
+},
+{
+  "model": "customers.customer",
+  "pk": 1,
+  "fields": {
+    "id_customer": "DEMO-CUST-001",
+    "legal_name": "Demo Customer (fictional)",
+    "name": "Demo Customer",
+    "tax_id": "DEMO-TAX",
+    "country": "Mexico",
+    "state_province": "Demo State",
+    "city": "Demo City",
+    "address": "Example address (fictional)",
+    "zip_code": 10000,
+    "phone": 0,
+    "email": "customer@example.com",
+    "contact_name": "Demo Contact",
+    "contact_role": "Purchasing",
+    "category": "Demo",
+    "payment_terms": "Immediate",
+    "currency": "USD",
+    "payment_method": "Transfer",
+    "bank_account": "NOT-REAL",
+    "status": "Active",
+    "created_at": "2026-11-26T03:30:04.166Z",
+    "updated_at": "2026-11-26T03:30:04.166Z",
+    "created_by": null
+  }
+},
+{
+  "model": "suppliers.supplier",
+  "pk": 1,
+  "fields": {
+    "id_supplier": "DEMO-SUP-001",
+    "legal_name": "Demo Supplier (fictional)",
+    "name": "Demo Supplier",
+    "tax_id": "DEMO-TAX",
+    "country": 1,
+    "state_province": "Demo State",
+    "city": "Demo City",
+    "address": "Example address (fictional)",
+    "zip_code": 10000,
+    "phone": 0,
+    "email": "supplier@example.com",
+    "contact_name": "Demo Contact",
+    "contact_role": "Purchasing",
+    "category": "Demo",
+    "payment_terms": "Immediate",
+    "currency": 3,
+    "payment_method": "Transfer",
+    "bank_account": "NOT-REAL",
+    "status": 1,
+    "created_at": "2026-11-26T03:30:04.164Z",
+    "updated_at": "2026-11-26T03:30:04.164Z",
+    "created_by": null
+  }
+}
+]

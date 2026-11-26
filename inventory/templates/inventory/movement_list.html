@@ -1,0 +1,174 @@
+
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}Inventory Movements{% endblock %}
+
+{% block content %}
+
+<h2 class="text-3xl font-bold text-gray-800 mb-6 border-b-2 border-gray-400 pb-2">
+    Inventory Movements
+</h2>
+
+<div class="flex justify-between items-center mb-6">
+
+    <div class="flex space-x-4">
+
+        <a href="{% url 'inventory:movement_list' %}"
+           class="bg-[#233b6e] text-white font-semibold py-2 px-6 rounded-lg shadow-md">
+            Movements
+        </a>
+
+        <a href="{% url 'inventory:stock_list' %}"
+           class="bg-gray-200 text-gray-800 font-semibold py-2 px-6 rounded-lg shadow-md hover:bg-gray-300">
+            Stock
+        </a>
+
+    </div>
+
+    {% if permissions.inventory > 1 %}
+    <a href="{% url 'inventory:create_movement' %}"
+       class="bg-[#233b6e] text-white font-semibold py-2 px-6 rounded-lg shadow-md hover:bg-[#1a2c53]">
+        Create New Movement
+    </a>
+    {% endif %}
+
+</div>
+
+
+<div class="mb-6 p-4 border rounded-lg bg-gray-50">
+
+    <form method="get"
+          action="{% url 'inventory:movement_list' %}"
+          class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+
+        <div>
+            <label for="id_material" class="block text-sm font-medium text-gray-700">ID Material</label>
+            <input type="text" name="id_material" id="id_material" value="{{ request.GET.id_material }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+        </div>
+        <div>
+            <label for="location" class="block text-sm font-medium text-gray-700">Location</label>
+            <select name="location" id="location" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                <option value="">ALL</option>
+                {% for location in locations %}
+                    <option value="{{ location.pk }}" {% if request.GET.location == location.pk|stringformat:'s' %}selected{% endif %}>{{ location.code }} - {{ location.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="type" class="block text-sm font-medium text-gray-700">Movement Type</label>
+            <select name="type" id="type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                <option value="">ALL</option>
+                {% for mov_type in mov_types %}
+                    <option value="{{ mov_type.pk }}" {% if request.GET.type == mov_type.pk|stringformat:'s' %}selected{% endif %}>{{ mov_type.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="md:col-span-3 flex flex-wrap items-center justify-between gap-4">
+
+            <div class="flex space-x-2">
+                <button type="submit"
+                        class="bg-[#233b6e] text-white px-4 py-2 rounded-lg shadow-md hover:bg-[#1a2c53]">
+                    Filter
+                </button>
+
+                <a href="{% url 'inventory:movement_list' %}"
+                   class="bg-gray-500 text-white px-4 py-2 rounded-lg shadow-md hover:bg-gray-600">
+                    Clear
+                </a>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-3">
+                <a href="?{{ query_string }}&export=csv"
+                   class="bg-green-600 text-white font-semibold py-2 px-6 rounded-lg hover:bg-green-700">
+                    Export to CSV
+                </a>
+
+
+            </div>
+
+        </div>
+    </form>
+</div>
+
+<div class="bg-white p-6 rounded-lg shadow-md overflow-x-auto">
+
+    <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">ID Movement</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Date</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Location</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">ID Material</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Material Name</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Movement Type</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Quantity</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Unit</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Price</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Currency</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Exchange Rate</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">User</th>
+            </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+            {% for m in page_obj %}
+            <tr>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ m.id_inventory_movement }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ m.created_at|date:"Y-m-d H:i:s" }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ m.id_location.name }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ m.id_material.id_material }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ m.id_material.name }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm {% if m.movement_type.symbol == 'PUR' or m.movement_type.symbol == 'GR' %}text-green-700{% elif m.movement_type.symbol == 'LOSS' or m.movement_type.symbol == 'INT_USE' or m.movement_type.symbol == 'SALE' %}text-red-700{% else %}text-gray-500{% endif %} font-semibold">{{ m.movement_type.name }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm {% if m.movement_type.symbol == 'PUR' or m.movement_type.symbol == 'GR' %}text-green-700{% elif m.movement_type.symbol == 'LOSS' or m.movement_type.symbol == 'INT_USE' or m.movement_type.symbol == 'SALE' %}text-red-700{% else %}text-gray-500{% endif %} font-semibold">{{ m.quantity }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ m.unit_type.symbol }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ m.price|floatformat:2 }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ m.currency.symbol }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ m.exchange_rate|floatformat:6 }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ m.created_by.username|default:"N/A" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="12" class="px-6 py-4 text-sm text-gray-500 text-center">No inventory movements found</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {% if page_obj.has_other_pages %}
+    <div class="flex justify-center mt-6">
+        <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px"
+             aria-label="Pagination">
+
+            {% if page_obj.has_previous %}
+                <a href="?{{ query_string }}&page={{ page_obj.previous_page_number }}"
+                   class="px-3 py-2 border border-gray-300 text-gray-500 hover:bg-gray-50">
+                    &lsaquo;
+                </a>
+            {% endif %}
+
+            {% for i in page_obj.paginator.page_range %}
+                {% if page_obj.number == i %}
+                    <span class="px-4 py-2 border border-gray-300 bg-gray-200 text-gray-700">
+                        {{ i }}
+                    </span>
+                {% else %}
+                    <a href="?{{ query_string }}&page={{ i }}"
+                       class="px-4 py-2 border border-gray-300 text-gray-500 hover:bg-gray-50">
+                        {{ i }}
+                    </a>
+                {% endif %}
+            {% endfor %}
+
+            {% if page_obj.has_next %}
+                <a href="?{{ query_string }}&page={{ page_obj.next_page_number }}"
+                   class="px-3 py-2 border border-gray-300 text-gray-500 hover:bg-gray-50">
+                    &rsaquo;
+                </a>
+            {% endif %}
+
+        </nav>
+    </div>
+    {% endif %}
+
+</div>
+
+{% endblock content %}

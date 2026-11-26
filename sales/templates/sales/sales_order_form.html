@@ -1,0 +1,216 @@
+{% extends "core/base.html" %}
+{% load static %}
+{% block title %}Create New Sales Order{% endblock %}
+{% block content %}
+<h2 class="text-3xl font-bold text-gray-800 mb-6 border-b-2 border-gray-400 pb-2">Sales</h2>
+<div class="max-w-7xl mx-auto bg-white p-8 rounded-lg shadow-md mt-10">
+    <h2 class="text-3xl font-bold text-gray-800 mb-6 border-b-2 border-gray-400 pb-2">Create New Sales Order</h2>
+    <form id="sales-order-form" method="post" action="{% url 'sales:sales_order_create' %}" class="space-y-6">
+        {% csrf_token %}
+        <div id="form-error" role="alert" class="hidden bg-red-100 border border-red-400 text-red-700 p-3 rounded-lg"></div>
+        <h3 class="text-xl font-semibold text-gray-700 mb-4">Customer Selection</h3>
+        <div class="max-w-xl space-y-4">
+            <div class="flex items-center space-x-4">
+                <label for="customer_search" class="block text-sm font-medium text-gray-700 w-1/3">Customer ID</label>
+                <div class="w-2/3"><input id="customer_search" type="text" list="customer-options" required placeholder="Enter Customer ID" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                    <datalist id="customer-options">{% for customer in customers %}<option value="{{ customer.id_customer }}">{{ customer.name }}</option>{% endfor %}</datalist>
+                </div>
+            </div>
+            <div class="flex items-center space-x-4">
+                <label for="estimated_delivery_date" class="block text-sm font-medium text-gray-700 w-1/3">Estimated Delivery Date</label>
+                <input type="date" id="estimated_delivery_date" name="estimulated_delivery_date" required class="w-2/3 px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+        </div>
+        <hr class="my-6">
+        <h3 class="text-xl font-semibold text-gray-700 mb-4">Customer Master Data</h3>
+        <div class="max-w-xl space-y-4">
+            <div class="flex items-center space-x-4">
+                <label for="name_display" class="block text-sm font-medium text-gray-700 w-1/3">Name</label>
+                <input type="text" id="name_display" readonly class="w-2/3 px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed">
+            </div>
+            <div class="flex items-center space-x-4">
+                <label for="address_display" class="block text-sm font-medium text-gray-700 w-1/3">Address</label>
+                <input type="text" id="address_display" readonly class="w-2/3 px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed">
+            </div>
+            <div class="flex items-center space-x-4">
+                <label for="city_display" class="block text-sm font-medium text-gray-700 w-1/3">City</label>
+                <input type="text" id="city_display" readonly class="w-2/3 px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed">
+            </div>
+            <div class="flex items-center space-x-4">
+                <label for="country_display" class="block text-sm font-medium text-gray-700 w-1/3">Country</label>
+                <input type="text" id="country_display" readonly class="w-2/3 px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed">
+            </div>
+        </div>
+        <hr class="my-6">
+        <h3 class="text-xl font-semibold text-gray-700 mb-4">Sales Order Details</h3>
+        <h3 class="text-xl font-semibold text-gray-700 mb-4">Line Items</h3>
+        <p class="text-sm text-gray-500">Select a material and location to check available stock. WAC is in USD; margin is shown only for USD prices.</p>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50"><tr>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">#</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">ID Material</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Description</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Location</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Available</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Qty</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Unit</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Price</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Currency</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">WAC USD</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Margin (%)</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>
+                </tr></thead>
+                <tbody id="line-items-container" class="bg-white divide-y divide-gray-200"></tbody>
+            </table>
+        </div>
+        <button type="button" id="add-item-btn" class="mt-4 bg-green-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-600">Add Item</button>
+        <hr class="my-6">
+        <div class="flex justify-end space-x-4 pt-6">
+            <a href="{% url 'sales:sales_order_list' %}" class="bg-gray-300 text-gray-800 font-semibold py-2 px-6 rounded-lg hover:bg-gray-400">Cancel</a>
+            <button type="submit" class="bg-[#233b6e] text-white font-semibold py-2 px-6 rounded-lg hover:bg-[#1a2c53]">Create Sales Order</button>
+        </div>
+    </form>
+</div>
+<template id="line-template">
+    <tr class="hover:bg-gray-50">
+        <td class="px-3 py-2 text-sm text-gray-500" data-field="position"></td>
+        <td class="px-3 py-2"><select data-field="material" required aria-label="Material" class="w-32 px-2 py-1 border border-gray-300 rounded-md text-sm"><option value="">Select</option>{% for material in materials %}<option value="{{ material.id_material }}" data-description="{{ material.description }}">{{ material.id_material }} - {{ material.name }}</option>{% endfor %}</select></td>
+        <td class="px-3 py-2"><input data-field="description" readonly aria-label="Description" class="w-40 px-2 py-1 border rounded-md bg-gray-100 text-sm"></td>
+        <td class="px-3 py-2"><select data-field="location" required aria-label="Location" class="w-36 px-2 py-1 border border-gray-300 rounded-md text-sm"><option value="">Select</option>{% for location in locations %}<option value="{{ location.pk }}">{{ location.code }} - {{ location.name }}</option>{% endfor %}</select></td>
+        <td class="px-3 py-2"><input data-field="available" readonly aria-label="Available" class="w-20 px-2 py-1 border rounded-md bg-gray-100 text-sm"></td>
+        <td class="px-3 py-2"><input data-field="quantity" type="number" min="1" step="1" value="1" required aria-label="Quantity" class="w-20 px-2 py-1 border border-gray-300 rounded-md text-sm"></td>
+        <td class="px-3 py-2"><input data-field="unit" readonly aria-label="Unit" class="w-16 px-2 py-1 border rounded-md bg-gray-100 text-sm"></td>
+        <td class="px-3 py-2"><input data-field="price" type="number" min="0.01" step="any" required aria-label="Price" class="w-24 px-2 py-1 border border-gray-300 rounded-md text-sm"></td>
+        <td class="px-3 py-2"><select data-field="currency" required aria-label="Currency" class="w-24 px-2 py-1 border border-gray-300 rounded-md text-sm"><option value="">Select</option>{% for currency in currencies %}<option value="{{ currency.pk }}" data-symbol="{{ currency.symbol }}" {% if currency.symbol == 'USD' %}selected{% endif %}>{{ currency.symbol }}</option>{% endfor %}</select></td>
+        <td class="px-3 py-2"><input data-field="wac" readonly aria-label="WAC USD" class="w-28 px-2 py-1 border rounded-md bg-gray-100 text-sm"></td>
+        <td class="px-3 py-2"><input data-field="margin" readonly aria-label="Margin" class="w-24 px-2 py-1 border rounded-md bg-gray-100 text-sm"></td>
+        <td class="px-3 py-2"><button type="button" class="remove-item-btn text-red-600 hover:text-red-900 text-sm">Remove</button></td>
+    </tr>
+</template>
+{% endblock content %}
+{% block extra_js %}
+<script>
+window.addEventListener('load', function () {
+    const D = document;
+    const form = D.getElementById('sales-order-form');
+    const searchI = D.getElementById('customer_search');
+    const dateI = D.getElementById('estimated_delivery_date');
+    const linesC = D.getElementById('line-items-container');
+    const csrf = form.querySelector('[name=csrfmiddlewaretoken]').value;
+    const errorBox = D.getElementById('form-error');
+    const URLs = {
+        customer: "{% url 'sales:get_customer_details' 'CUSTOMER_PLACEHOLDER' %}",
+        stock: "{% url 'sales:get_stock_data' %}",
+        create: form.action,
+        list: "{% url 'sales:sales_order_list' %}"
+    };
+    let customerId = '';
+    let customerRequest = 0;
+    const field = (row, name) => row.querySelector(`[data-field="${name}"]`);
+    const showError = message => { errorBox.textContent = message; errorBox.classList.toggle('hidden', !message); };
+    const fetchData = async url => {
+        const response = await fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}});
+        if (!response.ok) throw new Error(`Request failed (${response.status}).`);
+        return response.json();
+    };
+    const clearCustomer = () => {
+        customerId = '';
+        ['name','address','city','country'].forEach(f => D.getElementById(`${f}_display`).value = '');
+    };
+    const loadCustomer = async () => {
+        const id = searchI.value.trim();
+        const request = ++customerRequest;
+        clearCustomer();
+        if (!id) return;
+        try {
+            const data = await fetchData(URLs.customer.replace('CUSTOMER_PLACEHOLDER', encodeURIComponent(id)));
+            if (request !== customerRequest || searchI.value.trim() !== id) return;
+            customerId = data.id_customer;
+            ['name','address','city','country'].forEach(f => D.getElementById(`${f}_display`).value = data[f] || '');
+            showError('');
+        } catch (error) { if (request === customerRequest) showError(`Customer: ${error.message}`); }
+    };
+    searchI.addEventListener('input', () => { ++customerRequest; clearCustomer(); });
+    searchI.addEventListener('change', loadCustomer);
+    searchI.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); loadCustomer(); } });
+    const updateMargin = row => {
+        const price = Number(field(row,'price').value);
+        const symbol = field(row,'currency').selectedOptions[0]?.dataset.symbol;
+        field(row,'margin').value = row.dataset.ready === 'yes' && price > 0 && symbol === 'USD' ? ((price - Number(field(row,'wac').value)) / price * 100).toFixed(2) : '';
+    };
+    const loadStock = async row => {
+        const material = field(row,'material');
+        const location = field(row,'location').value;
+        const id = material.value;
+        const request = String(Number(row.dataset.request || 0) + 1);
+        row.dataset.request = request;
+        row.dataset.ready = 'no';
+        field(row,'description').value = material.selectedOptions[0]?.dataset.description || '';
+        ['available','unit','wac','margin'].forEach(f => field(row,f).value = '');
+        field(row,'quantity').removeAttribute('max');
+        if (!id || !location) return;
+        try {
+            const params = new URLSearchParams({material_id:id, location_id:location});
+            const data = await fetchData(`${URLs.stock}?${params}`);
+            if (row.dataset.request !== request || !row.isConnected) return;
+            const available = Number(data.avaible);
+            const wac = Number(data.wac);
+            if (!Number.isFinite(available) || !Number.isFinite(wac)) throw new Error('Invalid stock response.');
+            field(row,'available').value = available;
+            field(row,'quantity').max = Math.max(0, available);
+            field(row,'unit').value = data.unit || '';
+            field(row,'wac').value = wac.toFixed(6);
+            row.dataset.ready = 'yes';
+            updateMargin(row);
+        } catch (error) { if (row.dataset.request === request) showError(`Stock: ${error.message}`); }
+    };
+    const renumber = () => [...linesC.rows].forEach((row,i) => field(row,'position').textContent = i+1);
+    const addLine = () => {
+        const row = D.getElementById('line-template').content.firstElementChild.cloneNode(true);
+        linesC.appendChild(row);
+        renumber();
+        ['material','location'].forEach(f => field(row,f).addEventListener('change', () => loadStock(row)));
+        field(row,'price').addEventListener('input', () => updateMargin(row));
+        field(row,'currency').addEventListener('change', () => updateMargin(row));
+        row.querySelector('.remove-item-btn').addEventListener('click', () => { row.remove(); renumber(); });
+    };
+    const serialize = () => {
+        if (!customerId || customerId !== searchI.value.trim()) throw new Error('Select and verify a customer first.');
+        if (!dateI.value || !linesC.rows.length) throw new Error('Delivery date and at least one line are required.');
+        const totals = new Map();
+        const lines = [...linesC.rows].map((row,i) => {
+            const id_material = field(row,'material').value;
+            const id_location = field(row,'location').value;
+            const quantity = Number(field(row,'quantity').value);
+            const price = Number(field(row,'price').value);
+            const currency_id = field(row,'currency').value;
+            if (!id_material || !id_location || !currency_id || !Number.isInteger(quantity) || quantity <= 0 || !Number.isFinite(price) || price <= 0 || row.dataset.ready !== 'yes') throw new Error(`Line ${i+1}: Missing or invalid information.`);
+            const key = JSON.stringify([id_material,id_location]);
+            const total = (totals.get(key) || 0) + quantity;
+            if (total > Number(field(row,'available').value)) throw new Error(`Line ${i+1}: Not enough available stock for this material and location.`);
+            totals.set(key,total);
+            return {id_material,id_location,quantity,price,currency_id};
+        });
+        return {id_customer: customerId, estimulated_delivery_date: dateI.value, lines};
+    };
+    form.addEventListener('submit', async e => {
+        e.preventDefault();
+        showError('');
+        const submit = form.querySelector('[type=submit]');
+        try {
+            const payload = serialize();
+            submit.disabled = true; submit.textContent = 'Creating...';
+            const response = await fetch(URLs.create, {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrf}, body:JSON.stringify(payload)});
+            const data = await response.json();
+            if (!response.ok || data.success !== true) throw new Error(data.error || `Error ${response.status}`);
+            alert(data.message || `Sales Order ${data.id} created successfully.`);
+            window.location.href = URLs.list;
+        } catch (error) { showError(error.message); errorBox.scrollIntoView({block:'center'}); }
+        finally { submit.disabled = false; submit.textContent = 'Create Sales Order'; }
+    });
+    D.getElementById('add-item-btn').addEventListener('click', addLine);
+    addLine();
+});
+</script>
+{% endblock extra_js %}

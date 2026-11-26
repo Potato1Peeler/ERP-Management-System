@@ -1,0 +1,720 @@
+import json
+from django.http import JsonResponse, HttpResponse
+from django.shortcuts import redirect, get_object_or_404
+from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render
+from django.db import transaction, models
+from django.core.paginator import Paginator
+from django.db.models import Max
+from django.contrib import messages
+from django.urls import reverse
+from .models import PurchaseOrder, LinesPurchaseOrder, OrderStatus, GoodsReceipt, GoodsReceiptStatus, LinesGoodsReceipt, PurchaseInvoice, InvoiceStatus, LinesPurchaseInvoice
+from suppliers.models import Supplier
+from materials.models import Material, Unit
+from core.models import Currency, ExchangeRate
+from users.models import UserRole
+from inventory.models import LocationInventory, MovementType, InventoryMovements
+from accounting.models import AccountAccount, Journal
+import csv
+from decimal import Decimal
+from inventory.views import sync_daily_stock_date
+from django.utils import timezone
+import math
+
+@login_required
+def purchase_order_list(request):
+    max_permission = UserRole.objects.filter(
+        user_id=request.user
+    ).aggregate(
+        max_permission=models.Max('role__purchases')
+    )['max_permission'] or 0
+
+    if max_permission == 0:
+        return redirect('dashboard')
+
+    purchase_orders_list = PurchaseOrder.objects.select_related(
+        'id_supplier', 'status', 'created_by'
+    ).all().order_by('-created_at', '-pk')
+
+    id_purchase_order = request.GET.get('id_purchase_order', '').strip()
+    supplier_id = request.GET.get('id_supplier', '').strip()
+    status_symbol = request.GET.get('status', '').strip()
+
+    if id_purchase_order:
+        purchase_orders_list = purchase_orders_list.filter(
+            id_purchase_order__icontains=id_purchase_order
+        )
+
+    if supplier_id:
+        purchase_orders_list = purchase_orders_list.filter(
+            id_supplier__id_supplier__icontains=supplier_id
+        )
+
+    if status_symbol:
+        purchase_orders_list = purchase_orders_list.filter(
+            status__symbol__iexact=status_symbol
+        )
+
+    if request.GET.get('export') == 'csv':
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = (
+            'attachment; filename="purchase_orders.csv"'
+        )
+
+        response.write('\ufeff'.encode('utf-8'))
+        writer = csv.writer(response)
+
+        writer.writerow([
+            'ID PO', 'Supplier ID', 'Supplier Name',
+            'Issue Date', 'Estimated Delivery Date',
+            'Status Symbol', 'Status Name',
+            'Created By', 'Created At'
+        ])
+
+        for po in purchase_orders_list:
+            writer.writerow([
+                po.id_purchase_order,
+                po.id_supplier.id_supplier,
+                po.id_supplier.name,
+                po.issue_date.strftime('%Y-%m-%d'),
+                po.estimulated_delivery_date.strftime('%Y-%m-%d'),
+                po.status.symbol,
+                po.status.name,
+                po.created_by.username if po.created_by else 'N/A',
+                po.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            ])
+
+        return response
+
+    paginator = Paginator(purchase_orders_list, 10)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    all_statuses_po = OrderStatus.objects.all().order_by('symbol')
+
+    query_params = request.GET.copy()
+    query_params.pop('page', None)
+    query_params.pop('export', None)
+
+    context = {
+        'page_obj': page_obj,
+        'all_statuses_po': all_statuses_po,
+        'permissions': {'purchase_orders': max_permission},
+        'query_string': query_params.urlencode(),
+    }
+
+    return render(
+        request,
+        'purchases/purchase_order_list.html',
+        context
+    )
+
+@login_required
+def get_supplier_details(request, supplier_id):
+    max_permission = UserRole.objects.filter(
+        user_id=request.user
+    ).aggregate(
+        max_permission=models.Max('role__purchases')
+    )['max_permission'] or 0
+
+    if max_permission == 0:
+        return redirect('dashboard')
+
+    supplier = get_object_or_404(Supplier, id_supplier = supplier_id)
+
+    data = {
+        'id_supplier': supplier.id_supplier,
+        'name': supplier.name,
+        'legal_name': supplier.legal_name,
+        'tax_id': supplier.tax_id,
+        'address': supplier.address,
+        'city': supplier.city,
+        'state_province': supplier.state_province,
+        'country': supplier.country.name,
+        'zip_code': supplier.zip_code,
+        'phone': supplier.phone,
+        'email': supplier.email,
+        'contact_name': supplier.contact_name,
+        'payment_terms': supplier.payment_terms,
+        'currency': supplier.currency.symbol,
+
+    }
+
+    return JsonResponse(data)
+
+@login_required
+def get_material_details(request, material_id):
+
+    max_permission = UserRole.objects.filter(
+        user_id=request.user
+    ).aggregate(
+        max_permission=models.Max('role__purchases')
+    )['max_permission'] or 0
+
+    if max_permission == 0:
+        return redirect('dashboard')
+
+    material = get_object_or_404(Material, id_material = material_id)
+
+    data = {
+        'id_material': material.id_material,
+        'unit': material.unit.symbol,
+        'description': material.description,
+
+    }
+
+    return JsonResponse(data)
+
+@login_required
+def purchase_order_form(request):
+    max_permission = UserRole.objects.filter(
+        user_id=request.user
+    ).aggregate(
+        max_permission=models.Max('role__purchases')
+    )['max_permission'] or 0
+
+    if max_permission == 0:
+        return redirect('dashboard')
+
+    max_permission = UserRole.objects.filter(user_id=request.user).aggregate(max_permission=models.Max('role__purchases'))['max_permission'] or 0
+
+    if max_permission < 2:
+        return redirect('purchases:purchase_order_list')
+    if max_permission == 0:
+        return redirect('dashboard')
+
+    
+    context = {
+        'is_detail': False,
+        'title':'Create New Pruchase Order'
+
+    }
+
+    return render(request, 'purchases/purchase_order_form.html', context)
+
+@login_required
+def purchase_order_details(request, pk):
+
+    max_permission = UserRole.objects.filter(
+        user_id=request.user
+    ).aggregate(
+        max_permission=models.Max('role__purchases')
+    )['max_permission'] or 0
+
+    if max_permission == 0:
+        return redirect('dashboard')
+
+    purchase_order = get_object_or_404(PurchaseOrder, pk=pk)
+
+    order_lines = LinesPurchaseOrder.objects.filter(id_purchase_order=purchase_order).order_by('position')
+
+    context = {
+        'purchase_order': purchase_order,
+        'order_lines': order_lines,
+        'is_detail': True,
+        'goods_receipt_url_name': 'purchases:goods_receipt_create',
+        'invoice_url_name': 'purchases:invoice_create',
+    }
+
+    return render(request, 'purchases/purchase_order_form.html', context)
+
+@login_required
+@require_POST
+@transaction.atomic
+def create_purchase_order(request):
+
+    max_permission = UserRole.objects.filter(
+        user_id=request.user
+    ).aggregate(
+        max_permission=models.Max('role__purchases')
+    )['max_permission'] or 0
+
+    if max_permission == 0:
+        return redirect('dashboard')
+
+
+    try:
+        data = json.loads(request.body)
+
+        supplier_id_str = data.get('id_supplier')
+        estimated_delivery_date = data.get('estimated_delivery_date')
+        lines_data = data.get('lines', [])
+
+        if not supplier_id_str or not estimated_delivery_date or not lines_data:
+            return JsonResponse({'error':'Missing required fields (Supplier ID, Delivery Date or Line Items).'}, status= 400)
+
+        try:
+            supplier_id_value = supplier_id_str
+            supplier = get_object_or_404(Supplier, id_supplier = supplier_id_value)
+            status = get_object_or_404(OrderStatus, pk = 2)
+        except Exception:
+            return JsonResponse({'error':'Invalid Supplier ID or default Order Status not found'}, status = 400)
+
+        existing_ids = PurchaseOrder.objects.values_list(
+            'id_purchase_order', flat=True
+        )
+
+        next_po_number = max(
+            (int(po_id) for po_id in existing_ids if po_id.isdigit()),
+            default=0
+        ) + 1
+
+        next_po_id = str(next_po_number)
+
+        purchase_order = PurchaseOrder.objects.create(
+            id_purchase_order= next_po_id,
+            id_supplier = supplier,
+            estimulated_delivery_date = estimated_delivery_date,
+            status = status,
+            created_by = request.user,
+        )
+
+        for i, line_data in enumerate(lines_data, start = 1):
+            material_id = line_data.get('id_material')
+            unit_symbol = line_data.get('unit_material')
+            currency_symbol = line_data.get('currency_supplier')
+            quantity = float(line_data.get('quantity'))
+            price = float(line_data.get('price'))
+
+            if not quantity.is_integer() or quantity <= 0:
+                raise ValueError("Quantity must be a positive integer.")
+
+            if not math.isfinite(price) or price <= 0:
+                raise ValueError("Price must be greater than zero.")
+
+            quantity = int(quantity)
+            position = line_data.get('position', i)
+
+            try:
+                material = get_object_or_404(Material, id_material = material_id)
+                unit_obj = get_object_or_404(Unit, symbol = unit_symbol)
+                currency_obj = get_object_or_404(Currency, symbol = currency_symbol)
+            except Material.DoesNotExist:
+                raise ValueError(f"Material ID '{material_id}' not found for line {i}")
+            except Unit.DoesNotExist:
+                raise ValueError(f"Unid symbol '{unit_symbol}' not found for line {i}")
+            except Currency.DoesNotExist:
+                raise ValueError(f"Currency symbol '{currency_symbol}' not found for line {i}")
+
+            line_po_id = f"{next_po_id}-{str(position).zfill(3)}"
+
+            LinesPurchaseOrder.objects.create(
+                id_purchase_order_line = line_po_id,
+                id_purchase_order = purchase_order,
+                id_material = material,
+                position = position,
+                quantity = quantity,
+                unit_material = unit_obj,
+                price = price,
+                currency_supplier = currency_obj,
+                received_quantity = 0,
+                created_by = request.user
+            )
+
+        response_data = {
+            'success':True,
+            'id_purchase_order': next_po_id,
+            'message':f"Purchase Order {next_po_id} created successfully",
+            'redirect_url': reverse('purchases:purchase_order_list')
+        }
+        return JsonResponse(response_data, status=201)
+
+    except ValueError as e:
+        transaction.set_rollback(True)
+        return JsonResponse({'error': f'Validation Error: {str(e)}'}, 
+                            status=400)
+    except json.JSONDecodeError:
+        transaction.set_rollback(True)
+        return JsonResponse({'error': 'Invalid JSON format in request body'},
+                            status=400)
+    except Exception as e:
+        transaction.set_rollback(True)
+        print(f"CRITICAL ERROR: {e}")
+        return JsonResponse({'error': f'An unexpected server ocurred: {str(e)}'}, status=500)
+
+
+@login_required
+def goods_receipt_form(request, po_pk):
+    max_permission = UserRole.objects.filter(user_id=request.user).aggregate(max_permission=models.Max('role__purchases'))['max_permission'] or 0
+
+    if max_permission < 2:
+        return redirect('purchases:purchase_order_list')
+    if max_permission == 0:
+        return redirect('dashboard')
+
+    
+    purchase_order = get_object_or_404(PurchaseOrder, pk = po_pk)
+    order_lines = LinesPurchaseOrder.objects.filter(
+        id_purchase_order = purchase_order
+    ).exclude(
+        quantity__lte = models.F('received_quantity')
+    ).order_by('position')
+
+    if not order_lines.exists():
+        return redirect('purchases:purchase_order_details', pk = po_pk)
+
+    for line in order_lines:
+        line.pending_quantity = line.quantity - line.received_quantity
+
+    locations = LocationInventory.objects.filter(status__is_active=True).order_by('code')
+
+    context = {
+        'purchase_order': purchase_order,
+        'order_lines': order_lines,
+        'locations': locations,
+    }
+
+    return render(request, 'purchases/goods_receipt_form.html', context)
+
+@require_POST
+@transaction.atomic
+@login_required
+def post_goods_receipt(request):
+
+    max_permission = UserRole.objects.filter(
+        user_id=request.user
+    ).aggregate(
+        max_permission=models.Max('role__purchases')
+    )['max_permission'] or 0
+
+    if max_permission == 0:
+        return redirect('dashboard')
+
+    try:
+        data = json.loads(request.body)
+
+        po_pk = data.get('po_pk')
+        receipt_date = data.get('receipt_date')
+        lines_data = data.get('lines', [])
+
+        if not lines_data:
+            return JsonResponse({'error': 'Must receipt at least 1 quantity.'}, status= 400)
+
+        purchase_order = get_object_or_404(PurchaseOrder, pk=po_pk)
+
+        order_date = purchase_order.issue_date
+
+        rate_obj = ExchangeRate.objects.filter(
+            currency = purchase_order.id_supplier.currency,
+            date__lte = order_date
+        ).first()
+
+        if purchase_order.id_supplier.currency.symbol == 'USD':
+            current_exchange_rate = Decimal('1.0')
+
+        elif rate_obj and rate_obj.rate > 0:
+            current_exchange_rate = rate_obj.rate
+
+        else:
+            raise ValueError("Exchange rate not available.")
+
+        max_id_result = GoodsReceipt.objects.aggregate(max_id = Max('id_goods_receipt'))
+        last_id_str = max_id_result.get('max_id')
+        next_gr_number = 1
+        if last_id_str:
+            try:
+                next_gr_number = int(last_id_str) + 1
+            except ValueError:
+                next_gr_number = 1
+
+        next_gr_id = str(next_gr_number).zfill(10)
+
+        gr_status_completed = get_object_or_404(GoodsReceiptStatus, symbol='COMPLETED')
+
+        goods_receipt = GoodsReceipt.objects.create(
+            id_goods_receipt = next_gr_id,
+            id_purchase_order = purchase_order,
+            receipt_date = receipt_date,
+            status = gr_status_completed,
+            created_by = request.user,
+        )
+
+        movement_type_pur = get_object_or_404(MovementType, symbol = 'PUR')
+
+        total_ordered_qty = purchase_order.linespurchaseorder_set.aggregate(total=models.Sum('quantity'))['total'] or 0
+        total_previously_received = purchase_order.linespurchaseorder_set.aggregate(total=models.Sum('received_quantity'))['total'] or 0
+        total_received_in_this_gr = 0
+
+        status_received = get_object_or_404(OrderStatus, symbol = 'RECEIVED')
+        status_partially_received = get_object_or_404(OrderStatus, symbol = 'PARTIAL_RECEIVED')
+        status_invoiced = get_object_or_404(OrderStatus, symbol = 'INVOICED')
+        status_closed = get_object_or_404(OrderStatus, symbol = 'CLOSED')
+
+
+        for i, line_data in enumerate(lines_data, start=1):
+            line_pk = line_data['line_pk']
+            received_qty = int(line_data['received_quantity'])
+            location_pk = line_data['location_pk']
+
+            po_line = get_object_or_404(LinesPurchaseOrder.objects.select_for_update(), pk=line_pk, id_purchase_order=purchase_order)
+            location = get_object_or_404(LocationInventory, pk =location_pk)
+
+            if received_qty <= 0:
+                continue
+
+            avaible_to_receive = po_line.quantity - po_line.received_quantity
+            if received_qty > avaible_to_receive:
+                raise ValueError(f"Over reception in line {po_line.position}. Order: {po_line.quantity}, Receipt before: {po_line.received_quantity}, Trying to receive: {received_qty}")
+
+            inventory_movement = InventoryMovements.objects.create(
+                id_inventory_movement = f"GR-{next_gr_id}-{i}",
+                id_location = location,
+                id_material = po_line.id_material,
+                quantity = received_qty,
+                unit_type = po_line.unit_material,
+                movement_type = movement_type_pur,
+                price = po_line.price,
+                currency = po_line.currency_supplier,
+                exchange_rate = current_exchange_rate,
+                created_by = request.user
+            )
+
+            line_gr_id = f"{next_gr_id}-{str(i).zfill(3)}"
+            LinesGoodsReceipt.objects.create(
+                id_goods_receipt_line = line_gr_id,
+                id_goods_receipt = goods_receipt,
+                id_purchase_order_line = po_line,
+                id_material = po_line.id_material,
+                received_quantity = received_qty,
+                unit_material = po_line.unit_material,
+                id_location = location,
+                inventory_movement_ref = inventory_movement.id_inventory_movement,
+                created_by = request.user,
+            )
+
+            po_line.received_quantity += received_qty
+            po_line.save()
+
+            total_received_in_this_gr += received_qty
+
+        if total_received_in_this_gr <= 0:
+            raise ValueError(
+                "At least one item must be received."
+            )
+
+        total_final_received = total_previously_received + total_received_in_this_gr
+
+        current_status_symbol = purchase_order.status.symbol
+        if total_final_received >= total_ordered_qty:
+            if current_status_symbol == status_invoiced.symbol:
+                purchase_order.status = status_closed
+            else:
+                purchase_order.status = status_received
+        elif total_final_received > 0:
+            if current_status_symbol != status_invoiced.symbol:
+                purchase_order.status = status_partially_received
+
+        purchase_order.save()
+        sync_daily_stock_date()
+
+
+        response_data = {
+            'success': True,
+            'id_goods_receipt': next_gr_id,
+            'redirect_url': reverse(
+                'purchases:purchase_order_details',
+                kwargs={'pk': po_pk}
+            ),
+        }
+
+        return JsonResponse(response_data, status=200)
+
+    except ValueError as e:
+        transaction.set_rollback(True)
+        return JsonResponse({'error':f'Validation Error: {str(e)}'}, status=400)
+    except json.JSONDecodeError:
+        transaction.set_rollback(True)
+        return JsonResponse({'error': 'Invalid JSON format in request body.'}, status = 400)
+    except Exception as e:
+        transaction.set_rollback(True)
+        print(f"CRITICAL ERROR: {e}")
+        return JsonResponse({'error': f'An unexpected server error ocurred: {str(e)}'}, status=500)
+
+
+@login_required
+def purchase_invoice_form(request, po_pk):
+    max_permission = UserRole.objects.filter(user_id=request.user).aggregate(max_permission=models.Max('role__purchases'))['max_permission'] or 0
+
+    if max_permission < 2:
+        return redirect('purchases:purchase_order_list')
+    if max_permission == 0:
+        return redirect('dashboard')
+
+    
+    purchase_order = get_object_or_404(PurchaseOrder, pk = po_pk)
+
+    if purchase_order.status.symbol in ['CLOSED', 'INVOICED']:
+        messages.warning(request, f"The purchase order {po_pk} is already invoiced or closed. It's not possible to create a new invoice")
+        return redirect('purchases:purchase_order_details', pk=po_pk)
+
+    order_lines_qs = LinesPurchaseOrder.objects.filter(id_purchase_order=purchase_order).order_by('position')
+
+    currency = purchase_order.id_supplier.currency
+
+    for line in order_lines_qs:
+        line.quantity_to_invoice = line.quantity
+        line.line_total = line.quantity_to_invoice * line.price
+
+    context = {
+        'purchase_order': purchase_order,
+        'order_lines': order_lines_qs,
+        'currency': currency,
+        'total_ordered_amount': sum(line.quantity * line.price for line in order_lines_qs)
+    }
+
+    return render(request, 'purchases/purchase_invoice_form.html', context)
+
+@require_POST
+@transaction.atomic
+@login_required
+def post_purchase_invoice(request):
+
+    max_permission = UserRole.objects.filter(
+        user_id=request.user
+    ).aggregate(
+        max_permission=models.Max('role__purchases')
+    )['max_permission'] or 0
+
+    if max_permission == 0:
+        return redirect('dashboard')
+
+    try:
+        data = json.loads(request.body)
+
+        po_pk = data.get('po_pk')
+        due_date = data.get('due_date')
+        lines_data = data.get('lines', [])
+
+        if not lines_data or not due_date:
+            return JsonResponse({'error': 'Missing lines or due date.'}, status= 400)
+
+        purchase_order = get_object_or_404(PurchaseOrder, pk=po_pk)
+        if purchase_order.status.symbol in ['CLOSED', 'INVOICED']:
+            return JsonResponse({
+                'error': 'The purchase order is already invoiced or closed.'
+            }, status=400)
+
+
+        supplier = purchase_order.id_supplier
+        max_id_result = PurchaseInvoice.objects.aggregate(max_id = Max('id_invoice'))
+        last_id_str = max_id_result.get('max_id')
+        next_invoice_number = (int(last_id_str)+1) if last_id_str and last_id_str.isdigit() else 1
+        next_invoice_id = str(next_invoice_number).zfill(10)
+
+        invoice_status_pending = get_object_or_404(InvoiceStatus, symbol='PAID')
+
+        total_amount = 0
+        invoiced_lines = []
+        for i, line_data in enumerate(lines_data, start=1):
+            po_line = get_object_or_404(
+                LinesPurchaseOrder.objects.select_for_update(),
+                pk=line_data['line_pk'],
+                id_purchase_order=purchase_order
+            )
+            qty_to_invoice = int(line_data['quantity_to_invoice'])
+            if qty_to_invoice != po_line.quantity:
+                raise ValueError(
+                    f"Invalid invoice quantity in line {po_line.position}"
+                )
+
+            if po_line.currency_supplier_id != supplier.currency_id:
+                raise ValueError(
+                    f"Currency mismatch in line {po_line.position}"
+                )
+
+            if qty_to_invoice <= 0: continue
+
+            line_total = qty_to_invoice * po_line.price
+            total_amount +=  line_total
+
+            line_invoice_id = f"{next_invoice_id}--{str(i).zfill(3)}"
+            invoice_line = LinesPurchaseInvoice(
+                id_invoice_line = line_invoice_id,
+                id_purchase_order_line = po_line,
+                price = po_line.price,
+                quantity = qty_to_invoice,
+                currency_invoice_line = purchase_order.id_supplier.currency,
+                created_by = request.user
+            )
+            invoiced_lines.append(invoice_line)
+        if total_amount == 0:
+            return JsonResponse({'error': 'Total amount is zero. Check quantities'}, status = 400)
+
+        purchase_invoice = PurchaseInvoice.objects.create(
+            id_invoice = next_invoice_id,
+            id_purchase_order = purchase_order,
+            due_date = due_date,
+            total_amount = total_amount,
+            currency_invoice = purchase_order.id_supplier.currency,
+            status = invoice_status_pending,
+            created_by = request.user,
+        )
+
+        for line in invoiced_lines:
+            line.id_purchase_invoice = purchase_invoice
+            line.save()
+
+        try:
+            purchases_account = get_object_or_404(AccountAccount, code='1200')
+            bank_account = get_object_or_404(AccountAccount, code='1001')
+        except Exception as e:
+            raise ValueError(f"Accounting: Accounts required not found. Error: {e}")
+
+        group_id = purchase_invoice.id_invoice
+
+        Journal.objects.create(
+            id_journal = f"INV-{group_id}-D1",
+            group_journal = group_id,
+            reference = f"INV-{group_id} - Inventory/Purchases (Paid)",
+            id_account = purchases_account,
+            credit = 0.0,
+            debit = total_amount,
+            currency = purchase_order.id_supplier.currency,
+            created_by = request.user,
+        )
+
+        Journal.objects.create(
+            id_journal = f"INV-{group_id}-C1",
+            group_journal = group_id,
+            reference = f"INV-{group_id} - Payment from bank",
+            id_account = bank_account,
+            credit = total_amount,
+            debit = 0.0,
+            currency = purchase_order.id_supplier.currency,
+            created_by = request.user,
+        )
+
+        status_received = get_object_or_404(OrderStatus, symbol ='RECEIVED')
+        status_closed = get_object_or_404(OrderStatus, symbol ='CLOSED')
+        status_invoiced = get_object_or_404(OrderStatus, symbol ='INVOICED')
+
+        if purchase_order.status.symbol == status_received.symbol:
+            purchase_order.status = status_closed
+        else:
+            purchase_order.status = status_invoiced
+
+        purchase_order.save()
+
+        response_data = {
+            'success': True,
+            'id_invoice': next_invoice_id,
+            'redirect_url': reverse(
+                'purchases:purchase_order_details',
+                kwargs={'pk': po_pk}
+            ),
+        }
+
+        return JsonResponse(response_data, status=200)
+
+    except ValueError as e:
+        transaction.set_rollback(True)
+        return JsonResponse({'error':f'Validation Error: {str(e)}'}, status=400)
+    except json.JSONDecodeError:
+        transaction.set_rollback(True)
+        return JsonResponse({'error': 'Invalid JSON format in request body.'}, status = 400)
+    except Exception as e:
+        transaction.set_rollback(True)
+        print(f"CRITICAL ERROR: {e}")
+        return JsonResponse({'error': f'An unexpected server error ocurred: {str(e)}'}, status=500)
