@@ -1,7 +1,5 @@
 # ERP Management System
 
-[English](README.md) | **Español**
-
 Proyecto personal de un ERP desarrollado con Django para gestionar compras, ventas, inventarios y datos maestros. Inicié este proyecto para explorar el desarrollo backend, la lógica de negocio y la integración de distintos procesos empresariales en una misma aplicación.
 
 El proyecto sigue en desarrollo y está pensado para pruebas y demostraciones locales.
